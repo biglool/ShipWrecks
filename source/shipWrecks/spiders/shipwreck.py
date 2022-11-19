@@ -67,12 +67,13 @@ class ShipWreckSpider(Spider):
                 columnes = [cela.text.replace("\n","") for cela in dades.find_all('tr')[0].find_all('th')]
                 columnes = ['Zona1','Zona2','Zona3','Zona4'] + columnes
                 files_raw=dades.find("tbody").find_all('tr')       
-            
+
                 df=self.create_table(columnes,zones,files_raw)
                 dfs.append(df)
-        
+
         df_final=pd.concat(dfs, axis=0)
-        self.taules.append(df)
+        self.taules.append(df_final)
+
 
     def create_table(self,columnes,zones,raw):
 
@@ -94,6 +95,8 @@ class ShipWreckSpider(Spider):
                 print(columnes)
                 print(fila)
 
+        columnes=self.unify_columns(columnes)
+
         columnes.append("extra_links")      
         fila.append(''.join(str(link) for link in info_fila.find_all('a')))
 
@@ -101,6 +104,25 @@ class ShipWreckSpider(Spider):
         df.drop(index=df.index[0], axis=0,inplace=True)
         return df
 
+    def unify_columns(self,columns):
+
+        columns= [str.upper(col) for col in columns]
+
+        columns= ["SUNK DATE" if col=='DATE WRECKED' else col for col in columns]
+        columns= ["DATE WRECKED" if col=='END OF SERVICE' else col for col in columns]
+        columns= ["SUNK DATE" if col=='DATE' else col for col in columns]
+
+        columns= ["SHIP" if col=='NAME' else col for col in columns]
+
+        if 'LOCATION' in columns:
+            a, b = columns.index('LOCATION'), columns.index('ZONA3')
+            columns[b], columns[a] = columns[a], columns[b]
+        
+        if 'RIVER' in columns:
+            a, b = columns.index('RIVER'), columns.index('ZONA4')
+            columns[b], columns[a] = columns[a], columns[b]
+
+        return columns
 
     #obtenim el llistat de zones complet
     def expand_zones(self,titles):
@@ -138,7 +160,7 @@ process.crawl(ShipWreckSpider)
 process.start()
 
 df=pd.concat(ShipWreckSpider.taules, axis=0)
-df.to_csv('test.csv')  
+df.to_csv('../../../dataset/shipWrecks.csv')  
 print(df)
 
 
