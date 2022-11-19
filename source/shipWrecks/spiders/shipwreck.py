@@ -6,6 +6,7 @@ from scrapy.crawler import CrawlerProcess
 from bs4 import BeautifulSoup, SoupStrainer
 import numpy as np
 import pandas as pd
+
 import re
 
 class ShipWreckSpider(Spider):
@@ -25,7 +26,6 @@ class ShipWreckSpider(Spider):
         data=response.xpath("//a[not(ancestor::table) and starts-with(@title, 'List of shipwrecks')]")       
         for link in data:
             next_page_url ='https://en.wikipedia.org'+link.xpath('@href').extract()[0]
-            print(next_page_url)
             yield Request(next_page_url,self.extract_page)
             
 
@@ -46,8 +46,7 @@ class ShipWreckSpider(Spider):
         titol=""
         zones=["","","",""]
         dfs=[]
-        init=True
-
+  
         for info in data:
 
             dades=BeautifulSoup(info.get(), 'html5lib')
@@ -102,14 +101,17 @@ class ShipWreckSpider(Spider):
 
         df=pd.DataFrame(files, columns=columnes)
         df.drop(index=df.index[0], axis=0,inplace=True)
+        df=self.extract_extrainfo(df)
+        df=self.clean_data(df)
         return df
 
+    #corretgim noms de columnes
     def unify_columns(self,columns):
 
         columns= [str.upper(col) for col in columns]
 
         columns= ["SUNK DATE" if col=='DATE WRECKED' else col for col in columns]
-        columns= ["DATE WRECKED" if col=='END OF SERVICE' else col for col in columns]
+        columns= ["SUNK DATE" if col=='END OF SERVICE' else col for col in columns]
         columns= ["SUNK DATE" if col=='DATE' else col for col in columns]
 
         columns= ["SHIP" if col=='NAME' else col for col in columns]
@@ -123,6 +125,24 @@ class ShipWreckSpider(Spider):
             columns[b], columns[a] = columns[a], columns[b]
 
         return columns
+
+    #viatjar als links i buscar cordenades i potser imatges
+    def extract_extrainfo(self,df):
+        return df
+
+    #neteja de cordenades,anotacions i dates
+    def clean_data(self,df):
+        if 'COORDINATES' in df.columns:
+            df["COORDINATES"] = df["COORDINATES"].apply(lambda s:s if s.rfind("/") ==-1  else s[s.rfind("/")+1:len(s)])
+            df["COORDINATES"] = df["COORDINATES"].apply(lambda s:s if s.find("(")==-1 else s[0:s.find("(")])
+        if 'NOTES' in df.columns:
+            df["NOTES"] = df["NOTES"].apply(lambda s:re.sub("\[[0-9]+\]", "", s))
+        if "SUNK DATE" in df.columns:
+            df["SUNK DATE"] = df["SUNK DATE"].apply(lambda s:re.sub("\([A-Za-z]+\)", "", s))
+            #fer funcio per persejar data, els parejadors que he provat no tiren be
+
+        return df
+
 
     #obtenim el llistat de zones complet
     def expand_zones(self,titles):
@@ -160,6 +180,7 @@ process.crawl(ShipWreckSpider)
 process.start()
 
 df=pd.concat(ShipWreckSpider.taules, axis=0)
+df=df[['SHIP','FLAG','SUNK DATE','VESSEL TYPE','ZONA1','ZONA2','ZONA3','ZONA4','COORDINATES','NOTES','IMAGE']]
 df.to_csv('../../../dataset/shipWrecks.csv')  
 print(df)
 
