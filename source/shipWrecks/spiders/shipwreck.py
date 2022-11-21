@@ -1,19 +1,18 @@
-from concurrent.futures import process
-from sys import prefix
-from warnings import filters
+
 from scrapy import Spider, Request
 from scrapy.crawler import CrawlerProcess
+from concurrent.futures import process
 from bs4 import BeautifulSoup, SoupStrainer
+
 import numpy as np
 import pandas as pd
-
 import re
 
 class ShipWreckSpider(Spider):
     name = 'shipwreck'
     allowed_domains = ['en.wikipedia.org']
     start_urls = ['https://en.wikipedia.org/wiki/Lists_of_shipwrecks']
-    base='https://en.wikipedia.org'
+    base_url='https://en.wikipedia.org'
     taules=[]
 
     def start_requests(self):
@@ -25,21 +24,39 @@ class ShipWreckSpider(Spider):
 
         data=response.xpath("//a[not(ancestor::table) and starts-with(@title, 'List of shipwrecks')]")       
         for link in data:
-            next_page_url ='https://en.wikipedia.org'+link.xpath('@href').extract()[0]
+            next_page_url =self.base_url+link.xpath('@href').extract()[0]
             yield Request(next_page_url,self.extract_page)
             
-
-
     #procesem cada subpagina
     def extract_page(self, response): 
 
+        #EXTRAIEM
         main_title=response.xpath("//span[contains(@class, 'mw-page-title-main')]/text()[1]").extract()[0]
-        data=response.xpath(" //table[contains(@class, 'wikitable')]/preceding-sibling::*[self::h2 or self::h3 or self::h4][1] | //table[contains(@class, 'wikitable')]")
+        data=response.xpath("//table[contains(@class, 'wikitable')]/preceding-sibling::*[self::h2 or self::h3 or self::h4][1] | //table[contains(@class, 'wikitable')]")
         data_titles=response.xpath("//span[contains(@class, 'mw-headline') and not(contains(@id, 'Further_reading')) and not(contains(@id, 'References'))  and not(contains(@id, 'External_links'))]/ancestor::*[self::h2 or self::h3 or self::h4][1]")
         zones =self.expand_zones(data_titles)   
-        return self.parse_page(data,main_title,zones)
+        df= self.parse_page(data,main_title,zones)
 
-    #procesem la informacio de cada taula de la subpagina
+        #obtenim informacio extra dels links Que hem guardat.  Per cada fila fem una nevacio del link relleants..
+        self.taules.append(df)
+        for index, row in df.iterrows():
+            links=BeautifulSoup(str(row["extra_links"]), 'html5lib').find_all('a')
+        
+            for link in links:                 
+                url=self.base_url+link.get('href') 
+
+                #per cadalinks de les notes busquem una posiple localitzacio !! no sera perfecte pero solen coincidir.
+                if row["COORDINATES"]=="" and row["SHIP"]!=link.text:
+                    yield Request(url,self.search_cordinates, cb_kwargs={'row_index':index, 'taula_index':len(self.taules)-1} )
+
+                # aqui podriem buscar més informació, donat l'scope de la practica simplement ens guardem el link dela imatge
+                # poseteriorment es podrien baixar.
+                if row["SHIP"]==link.text :
+                    yield Request(url,self.search_image, cb_kwargs={'row_index':index, 'taula_index':len(self.taules)-1} )
+
+
+
+    #procesem la informacio de cada subpagina obtenint una taula unificada
     def parse_page(self,data,main_title,zones_expandit):
 
         main_title=main_title.replace("List of shipwrecks","").replace(" of ","").replace(" in the ","") 
@@ -53,7 +70,7 @@ class ShipWreckSpider(Spider):
             tipus = dades.find('body').find_all(recursive=False)[0].name
 
             if tipus !='table':
-                # buscame la llista de zones
+                # buscame la llista de zones correcta a la qual correspon la taula sgüent
                 titol=dades.find('span').text
                 index=int(tipus.replace("h", ""))-2
                 for info_zones in zones_expandit:
@@ -61,7 +78,7 @@ class ShipWreckSpider(Spider):
                          zones=info_zones.copy()
 
             else:
-                #creem files columnes i generem taula
+                #obtenim columnes i generem taula
                 zones.insert(0, main_title)
                 columnes = [cela.text.replace("\n","") for cela in dades.find_all('tr')[0].find_all('th')]
                 columnes = ['Zona1','Zona2','Zona3','Zona4'] + columnes
@@ -70,16 +87,22 @@ class ShipWreckSpider(Spider):
                 df=self.create_table(columnes,zones,files_raw)
                 dfs.append(df)
 
+        #anexem totes les taules de la subpagina
         df_final=pd.concat(dfs, axis=0)
-        self.taules.append(df_final)
+        df_final.reset_index(drop=True, inplace=True)
+        return df_final
 
 
+    #Extraiem les dades de la taula i anexem les columnes
     def create_table(self,columnes,zones,raw):
 
+        #donat que el format no es estandard per totes les tules errors detectats
         files=[]  
         for info_fila in raw:
             fila= [cela.text.strip() for cela in info_fila.find_all(recursive=False)]
             fila = zones[:4] +fila
+
+            columnes=self.unify_columns(columnes)
 
             if len(fila)< len(columnes):
                 for i in range(len(columnes)-len(fila)):
@@ -94,14 +117,13 @@ class ShipWreckSpider(Spider):
                 print(columnes)
                 print(fila)
 
-        columnes=self.unify_columns(columnes)
-
+        #guardem els links de cada un dels vaixells
         columnes.append("extra_links")      
         fila.append(''.join(str(link) for link in info_fila.find_all('a')))
 
+        #guardem la taula i fem una mica de neteja
         df=pd.DataFrame(files, columns=columnes)
         df.drop(index=df.index[0], axis=0,inplace=True)
-        df=self.extract_extrainfo(df)
         df=self.clean_data(df)
         return df
 
@@ -124,16 +146,40 @@ class ShipWreckSpider(Spider):
             a, b = columns.index('RIVER'), columns.index('ZONA4')
             columns[b], columns[a] = columns[a], columns[b]
 
+        if 'COORDINATES' not in columns:
+            columns.append('COORDINATES')
+
+        if 'IMAGE' not in columns:
+            columns.append('IMAGE')
+
         return columns
 
-    #viatjar als links i buscar cordenades i potser imatges
-    def extract_extrainfo(self,df):
-        return df
+
+
+    def search_cordinates(self, response,row_index,taula_index):
+
+        cord=response.xpath("//span[contains(@class, 'geo-default')]")
+        if len(cord) >0:
+            self.taules[taula_index].loc[row_index,"COORDINATES"]=BeautifulSoup(cord.get(), 'html5lib').text
+
+ 
+    def search_image(self, response,row_index,taula_index):
+
+        info=response.xpath("//table[contains(@class, 'infobox')]")
+        #resum de info extra
+        if len(info) >0 :
+            info=BeautifulSoup(info.get(), 'html5lib')
+            imatges=info.find_all('img')
+
+            if len(imatges) >0:
+                self.taules[taula_index].loc[row_index,"IMAGE"]=imatges[0].get('src')
+
+ 
 
     #neteja de cordenades,anotacions i dates
     def clean_data(self,df):
         if 'COORDINATES' in df.columns:
-            df["COORDINATES"] = df["COORDINATES"].apply(lambda s:s if s.rfind("/") ==-1  else s[s.rfind("/")+1:len(s)])
+            c = df["COORDINATES"].apply(lambda s:s if s.rfind("/") ==-1  else s[s.rfind("/")+1:len(s)])
             df["COORDINATES"] = df["COORDINATES"].apply(lambda s:s if s.find("(")==-1 else s[0:s.find("(")])
         if 'NOTES' in df.columns:
             df["NOTES"] = df["NOTES"].apply(lambda s:re.sub("\[[0-9]+\]", "", s))
@@ -143,9 +189,10 @@ class ShipWreckSpider(Spider):
 
         return df
 
-
     #obtenim el llistat de zones complet
     def expand_zones(self,titles):
+        #aixo simplement es una funcio de ordenacio que guarda les zones de les capçaleres de la pagina
+        #basicament estructura informació que com a humans obtenim del contextualment de la pagina
         last_index=-1
         prefix=['','','','']
         llista=[]
@@ -175,13 +222,5 @@ class ShipWreckSpider(Spider):
         llista.append(prefix.copy())
         return llista
            
-process =CrawlerProcess()
-process.crawl(ShipWreckSpider)
-process.start()
-
-df=pd.concat(ShipWreckSpider.taules, axis=0)
-df=df[['SHIP','FLAG','SUNK DATE','VESSEL TYPE','ZONA1','ZONA2','ZONA3','ZONA4','COORDINATES','NOTES','IMAGE']]
-df.to_csv('../../../dataset/shipWrecks.csv')  
-print(df)
 
 
