@@ -124,7 +124,6 @@ class ShipWreckSpider(Spider):
         #guardem la taula i fem una mica de neteja
         df=pd.DataFrame(files, columns=columnes)
         df.drop(index=df.index[0], axis=0,inplace=True)
-        df=self.clean_data(df)
         return df
 
     #corretgim noms de columnes
@@ -176,18 +175,6 @@ class ShipWreckSpider(Spider):
 
  
 
-    #neteja de cordenades,anotacions i dates
-    def clean_data(self,df):
-        if 'COORDINATES' in df.columns:
-            c = df["COORDINATES"].apply(lambda s:s if s.rfind("/") ==-1  else s[s.rfind("/")+1:len(s)])
-            df["COORDINATES"] = df["COORDINATES"].apply(lambda s:s if s.find("(")==-1 else s[0:s.find("(")])
-        if 'NOTES' in df.columns:
-            df["NOTES"] = df["NOTES"].apply(lambda s:re.sub("\[[0-9]+\]", "", s))
-        if "SUNK DATE" in df.columns:
-            df["SUNK DATE"] = df["SUNK DATE"].apply(lambda s:re.sub("\([A-Za-z]+\)", "", s))
-            #fer funcio per persejar data, els parejadors que he provat no tiren be
-
-        return df
 
     #obtenim el llistat de zones complet
     def expand_zones(self,titles):
