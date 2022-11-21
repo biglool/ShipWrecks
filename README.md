@@ -1,7 +1,5 @@
 
-<<<<<<< HEAD
 # Práctica 1: Web scraping
->>>>>>> 7218856bfd61d3f19a9faee6bb0cd44a6e97b860
 
 ## Descripció
 
