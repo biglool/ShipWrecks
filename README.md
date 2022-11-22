@@ -21,10 +21,10 @@ Activitat realitzada per **Oriol Caravaca Müller** i **Pau Casanova Pedrol**.
  
 ## Codi font rellevant
 
-* **source/requirements.txt**: conte la informació dels requeriments de l'entorn.
-* **source/main.py**: punt de entrada del programa. Inicia el process de webscraping.
-* **source/shipWrecks/spiders/shipwreck.py**: conte la implementacio de la classe que s'encarga de fer el webscraping
-* **source/shipWrecks/settings.py**: conte  la configuració especifica per a les bones practiques del webscaping. Com per exemple el User-agent.
-* **source/postprocess/cleaning.py**: conte la implementacio de funcions per netejar les dades.
-* **source/visualitzacio/shipwreckPlot.py**: conte la implementacio de funcio que s'encarrega de generar la visualitzacio.
+* **source/requirements.txt**: Conte la informació dels requeriments de l'entorn.
+* **source/main.py**: Punt de entrada del programa. Inicia el process de webscraping.
+* **source/shipWrecks/spiders/shipwreck.py**: Conte la implementacio de la classe que s'encarga de fer el webscraping
+* **source/shipWrecks/settings.py**: Conte la configuració especifica per a les bones practiques del webscaping. Com per exemple el User-agent.
+* **source/postprocess/cleaning.py**: Conte la implementació de funcions per netejar les dades.
+* **source/visualitzacio/shipwreckPlot.py**: Conte la implementació de funcio que s'encarrega de generar la visualització.
 
