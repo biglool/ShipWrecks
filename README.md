@@ -15,8 +15,16 @@ https://en.wikipedia.org/wiki/Lists_of_shipwrecks
 
 Activitat realitzada per **Oriol Caravaca Müller** i **Pau Casanova Pedrol**.
 
-## Codi font
+## Dataset
 
-* **source/main.py**: Punto de entrada del programa. Inicia el process de webscraping.
+ https://doi.org/10.5281/zenodo.7347768
+ 
+## Codi font rellevant
+
+* **source/requirements.txt**: conte la informació dels requeriments de l'entorn.
+* **source/main.py**: punt de entrada del programa. Inicia el process de webscraping.
 * **source/shipWrecks/spiders/shipwreck.py**: conte la implementacio de la classe que s'encarga de fer el webscraping
+* **source/shipWrecks/settings.py**: conte  la configuració especifica per a les bones practiques del webscaping. Com per exemple el User-agent.
+* **source/postprocess/cleaning.py**: conte la implementacio de funcions per netejar les dades.
+* **source/visualitzacio/shipwreckPlot.py**: conte la implementacio de funcio que s'encarrega de generar la visualitzacio.
 
