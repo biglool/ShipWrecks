@@ -15,6 +15,7 @@ class ShipWreckSpider(Spider):
     base_url='https://en.wikipedia.org'
     taules=[]
 
+    #punt d'entrada 
     def start_requests(self):
         for u in self.start_urls:
             yield Request(u, callback=self.parse_main)  
@@ -30,29 +31,31 @@ class ShipWreckSpider(Spider):
     #procesem cada subpagina
     def extract_page(self, response): 
 
-        #EXTRAIEM
+        #EXTRAIEM la informacio de la pagina, la procesem i ens guardem la taula resultant
         main_title=response.xpath("//span[contains(@class, 'mw-page-title-main')]/text()[1]").extract()[0]
         data=response.xpath("//table[contains(@class, 'wikitable')]/preceding-sibling::*[self::h2 or self::h3 or self::h4][1] | //table[contains(@class, 'wikitable')]")
         data_titles=response.xpath("//span[contains(@class, 'mw-headline') and not(contains(@id, 'Further_reading')) and not(contains(@id, 'References'))  and not(contains(@id, 'External_links'))]/ancestor::*[self::h2 or self::h3 or self::h4][1]")
         zones =self.expand_zones(data_titles)   
         df= self.parse_page(data,main_title,zones)
-
-        #obtenim informacio extra dels links Que hem guardat.  Per cada fila fem una nevacio del link relleants..
         self.taules.append(df)
+
+        #obtenim informacio extra dels links que hem guardat.  Per cada fila/vaixell de la taula guardada fem una nevegacio del link relleants.
         for index, row in df.iterrows():
+
             links=BeautifulSoup(str(row["extra_links"]), 'html5lib').find_all('a')
         
             for link in links:                 
                 url=self.base_url+link.get('href') 
 
-                #per cadalinks de les notes busquem una posiple localitzacio !! no sera perfecte pero solen coincidir.
+                #per cada links de les notes busquem una posible localitzacio !! no sera perfecte pero solen coincidir.
                 if row["COORDINATES"]=="" and row["SHIP"]!=link.text:
                     yield Request(url,self.search_cordinates, cb_kwargs={'row_index':index, 'taula_index':len(self.taules)-1} )
 
-                # aqui podriem buscar més informació, donat l'scope de la practica simplement ens guardem el link dela imatge
-                # poseteriorment es podrien baixar.
+                # aqui podriem buscar més informació, donat l'scope de la practica simplement ens guardem:  
+                # -el tipus de vaixell  
+                # -link de la imatge que poseteriorment es podrien baixar.
                 if row["SHIP"]==link.text :
-                    yield Request(url,self.search_image, cb_kwargs={'row_index':index, 'taula_index':len(self.taules)-1} )
+                    yield Request(url,self.search_extra_info, cb_kwargs={'row_index':index, 'taula_index':len(self.taules)-1} )
 
 
 
@@ -70,7 +73,7 @@ class ShipWreckSpider(Spider):
             tipus = dades.find('body').find_all(recursive=False)[0].name
 
             if tipus !='table':
-                # buscame la llista de zones correcta a la qual correspon la taula sgüent
+                # buscam la llista de zones correcta a la qual correspon la taula sgüent
                 titol=dades.find('span').text
                 index=int(tipus.replace("h", ""))-2
                 for info_zones in zones_expandit:
@@ -151,18 +154,21 @@ class ShipWreckSpider(Spider):
         if 'IMAGE' not in columns:
             columns.append('IMAGE')
 
+        if 'VESSEL TYPE' not in columns:
+            columns.append('VESSEL TYPE')
+
         return columns
 
 
-
+    #obtenim coordenades
     def search_cordinates(self, response,row_index,taula_index):
 
         cord=response.xpath("//span[contains(@class, 'geo-default')]")
         if len(cord) >0:
             self.taules[taula_index].loc[row_index,"COORDINATES"]=BeautifulSoup(cord.get(), 'html5lib').text
 
- 
-    def search_image(self, response,row_index,taula_index):
+    #busquem info extra
+    def search_extra_info(self, response,row_index,taula_index):
 
         info=response.xpath("//table[contains(@class, 'infobox')]")
         #resum de info extra
@@ -172,14 +178,26 @@ class ShipWreckSpider(Spider):
 
             if len(imatges) >0:
                 self.taules[taula_index].loc[row_index,"IMAGE"]=imatges[0].get('src')
+            
+            try:
+                if self.taules[taula_index].loc[row_index,"VESSEL TYPE"] =="":
+                    type =info.find_all('tr')
+                    for fila in type:
+                        tds=fila.find_all('td')
+                        if len(tds)>1 and re.search("[Tt]ype",tds[0].text):
+                            self.taules[taula_index].loc[row_index,"VESSEL TYPE"]=tds[1].text
+            except:
+                print("Problema al buscar info extra") 
+                print(taula_index)
+                print(row_index)
+
+
 
  
-
-
     #obtenim el llistat de zones complet
     def expand_zones(self,titles):
         #aixo simplement es una funcio de ordenacio que guarda les zones de les capçaleres de la pagina
-        #basicament estructura informació que com a humans obtenim del contextualment de la pagina
+        #basicament estructura informació que com a humans obtenim contextualment de la pagina
         last_index=-1
         prefix=['','','','']
         llista=[]
